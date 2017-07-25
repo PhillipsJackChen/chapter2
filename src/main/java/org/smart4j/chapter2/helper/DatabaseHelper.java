@@ -1,15 +1,19 @@
 package org.smart4j.chapter2.helper;
 
 import org.apache.commons.dbutils.QueryRunner;
+import org.apache.commons.dbutils.handlers.BeanHandler;
 import org.apache.commons.dbutils.handlers.BeanListHandler;
+import org.apache.commons.dbutils.handlers.MapListHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.smart4j.chapter2.util.CollectionUtil;
 import org.smart4j.chapter2.util.PropsUtil;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -79,5 +83,65 @@ public final class DatabaseHelper {
             closeConnection();
         }
         return entityList;
+    }
+
+    public static <T> T queryEntity(Class<T> entityClass, String sql, Object... params) {
+        T entity;
+        try {
+            Connection conn = getConnection();
+            entity = QUERY_RUNNER.query(conn, sql, new BeanHandler<T>(entityClass), params);
+        } catch (SQLException e) {
+            LOGGER.error("query entity list failure", e);
+            throw new RuntimeException(e);
+        } finally {
+            closeConnection();
+        }
+        return entity;
+    }
+
+    public static List<Map<String, Object>> executeQuery(String sql, Object... params) {
+        List<Map<String, Object>> result;
+        try {
+            Connection conn = getConnection();
+            result = QUERY_RUNNER.query(conn, sql, new MapListHandler(), params);
+        } catch (Exception e) {
+            LOGGER.error("execute query failure", e);
+            throw new RuntimeException(e);
+        }
+        return result;
+    }
+
+    public static int executeUpdate(String sql, Object... params) {
+        int rows = 0;
+        try {
+            Connection conn = getConnection();
+            rows = QUERY_RUNNER.update(conn, sql, params);
+        } catch (SQLException e) {
+            LOGGER.error("execute update failure", e);
+            throw new RuntimeException(e);
+        } finally {
+            closeConnection();
+        }
+        return rows;
+    }
+
+    public static <T> boolean insertEntity(Class<T> entityClass, Map<String, Object> fieldMap) {
+        if (CollectionUtil.isEmpty(fieldMap)) {
+            LOGGER.error("can not insert entity: fieldMap is empty");
+            return false;
+        }
+        String sql = "insert into " + getTableName(entityClass);
+        StringBuilder columns = new StringBuilder("(");
+        StringBuilder values = new StringBuilder("(");
+        for (String fieldName : fieldMap.keySet()) {
+            columns.append(fieldName).append(", ");
+            values.append(fieldMap.get(fieldName)).append(", ");
+        }
+        columns.replace(columns.lastIndexOf(", "), columns.length(), ")");
+        values.replace(values.lastIndexOf(", "), values.length(), ")");
+        sql += columns + " values " + values;
+
+        Object[] params = fieldMap.values().toArray();
+        return executeUpdate(sql, params) == 1;
     }
 }
